@@ -76,7 +76,7 @@ def stream_music(song_name: str, range: str = Header(None)):
         end = int(end) if end else file_size - 1
         chunk_size = (end - start) + 1
         
-        # 每次只讀取播放器要求的那一小段音樂碎塊
+        # 每次只讀取播放器要求的那一小段音樂碎塊123333333
         def open_file_chunks():
             with open(file_path, "rb") as f:
                 f.seek(start)
