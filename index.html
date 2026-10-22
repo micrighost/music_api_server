@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deemo 音樂電台 🎵</title>
+    <style>
+        body {
+            margin: 0; padding: 0; background: #121212; color: #ffffff;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            display: flex; justify-content: center; align-items: center; height: 100vh;
+        }
+        .card {
+            background: #181818; padding: 30px; border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5); text-align: center; width: 360px;
+        }
+        .disc {
+            width: 140px; height: 140px; 
+            border-radius: 50%; margin: 15px auto; 
+            border: 8px solid #282828; 
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            /* 改為由 JavaScript 動態寫入背景圖 */
+            background-size: cover;
+            background-position: center;
+            position: relative;
+        }
+        .disc::after {
+            content: ''; position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%); width: 15px; height: 15px;
+            background: #121212; border-radius: 50%; border: 2px solid #282828;
+        }
+        .rotate { animation: spin 4s linear infinite; }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+        h2 { margin: 10px 0 5px 0; font-size: 22px; color: #1DB954; }
+        
+        .select-box {
+            width: 100%; padding: 12px; background: #282828; color: white;
+            border: 1px solid #444; border-radius: 8px; font-size: 14px;
+            margin-bottom: 15px; outline: none; cursor: pointer;
+        }
+        .select-box:focus { border-color: #1DB954; }
+        
+        .btn-group {
+            display: flex; gap: 10px; margin-top: 15px;
+        }
+        .sub-btn {
+            flex: 1; padding: 12px; font-size: 14px; background: #1DB954;
+            color: white; border: none; border-radius: 20px; cursor: pointer;
+            white-space: nowrap; font-weight: bold;
+            transition: transform 0.2s, background 0.2s;
+        }
+        .sub-btn:hover { background: #1ed760; transform: scale(1.02); }
+
+        audio {
+            width: 100%; margin-top: 15px; height: 32px;
+            filter: sepia(20%) saturate(70%) grayscale(1) invert(0.9);
+        }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <div id="disc" class="disc"></div>
+    <h2>Deemo 音樂電台</h2>
+    <p style="color:#aaa; font-size:14px; margin-bottom:15px;">請選擇想聽的歌曲：</p>
+
+    <!-- 這裡原本的 Jinja2 標籤全部移除，改由 JS 動態塞入選項 -->
+    <select id="song-select" class="select-box" onchange="changeSong()">
+        <option value="">正在連線至發射基地...</option>
+    </select>
+
+    <div id="controls">
+        <audio id="player" controls></audio>
+        
+        <div class="btn-group">
+            <button id="prev-btn" class="sub-btn" style="background: #282828; border: 1px solid #444; color: #aaa;" onclick="playPreviousSong()">↩️ 上一首</button>
+            <button id="play-pause-btn" class="sub-btn" onclick="togglePlay()">播放</button>
+            <button class="sub-btn" style="background: #282828; border: 1px solid #444;" onclick="playRandomSong()">隨機 🔀</button>
+        </div>
+    </div>
+</div>
+
+<script>
+        // 🛰️ 指定你的音樂 API 基地網址
+    const API_BASE_URL = "http://localhost:8000";
+
+    const player = document.getElementById('player');
+    const playPauseBtn = document.getElementById('play-pause-btn');
+    const prevBtn = document.getElementById('prev-btn');
+    const disc = document.getElementById('disc');
+    const songSelect = document.getElementById('song-select');
+
+    let isInitialized = false;
+    let songHistory = []; 
+    let isNavigatingHistory = false;
+
+    // 🔄 修正 1：音訊來源指向遠端 API 路由
+    function loadSong(songName) {
+        if (!songName) return;
+        player.src = `${API_BASE_URL}/api/music/${encodeURIComponent(songName)}`;
+        
+        // 🛠️ 嘗試啟用 MediaSession 機制以應對嚴格的瀏覽器背景播放限制
+        if ('mediaSession' in navigator) {
+            navigator.mediaSession.metadata = new MediaMetadata({
+                title: songName.replace('.mp3', ''),
+                artist: 'Deemo 音樂電台',
+                artwork: [{ src: `${API_BASE_URL}/api/cover`, type: 'image/jpeg' }]
+            });
+        }
+    }
+
+    function changeSong() {
+        const currentSong = songSelect.value;
+        if (!currentSong) return;
+
+        loadSong(currentSong);
+        if (isInitialized) {
+            player.play().catch(e => console.log("播放被瀏覽器阻擋：", e));
+        }
+    }
+
+    function playRandomSong() {
+        const totalSongs = songSelect.options.length;
+        if (totalSongs <= 1) return; 
+
+        if (isInitialized && !isNavigatingHistory) {
+            songHistory.push(songSelect.selectedIndex);
+            updatePrevButtonVisibility();
+        }
+
+        let randomIndex;
+        do {
+            randomIndex = Math.floor(Math.random() * totalSongs);
+        } while (randomIndex === songSelect.selectedIndex);
+
+        songSelect.selectedIndex = randomIndex;
+        isInitialized = true; 
+        changeSong();
+    }
+
+    function playPreviousSong() {
+        if (songHistory.length === 0) return;
+
+        isNavigatingHistory = true;
+        const previousIndex = songHistory.pop();
+        
+        songSelect.selectedIndex = previousIndex;
+        changeSong();
+        
+        isNavigatingHistory = false;
+        updatePrevButtonVisibility();
+    }
+
+    function updatePrevButtonVisibility() {
+        if (songHistory.length > 0) {
+            prevBtn.style.color = "#1DB954";
+            prevBtn.style.borderColor = "#1DB954";
+        } else {
+            prevBtn.style.color = "#aaa";
+            prevBtn.style.borderColor = "#444";
+        }
+    }
+
+    player.addEventListener('ended', () => {
+        playRandomSong(); 
+    });
+
+    function togglePlay() {
+        if (!isInitialized) {
+            isInitialized = true;
+            loadSong(songSelect.value);
+        }
+
+        if (player.paused) {
+            player.play().catch(e => console.log("播放被瀏覽器阻擋：", e));
+        } else {
+            player.pause();
+        }
+    }
+
+    player.addEventListener('play', () => {
+        isInitialized = true;
+        updateUI(true);
+    });
+    player.addEventListener('pause', () => updateUI(false));
+
+    function updateUI(isPlaying) {
+        if (isPlaying) {
+            playPauseBtn.innerText = "暫停";
+            playPauseBtn.style.background = "#555";
+            disc.classList.add('rotate');
+        } else {
+            playPauseBtn.innerText = "播放";
+            playPauseBtn.style.background = "#1DB954";
+            disc.classList.remove('rotate');
+        }
+    }
+
+    // 📡 關鍵修正：在發送請求時，強制帶上跳過 ngrok 警告頁面的秘密 Header
+    window.onload = async () => {
+        try {
+            // 🎯 重點在這裡：加上 headers 引數來解除 ngrok 的封印
+            const response = await fetch(`${API_BASE_URL}/api/info`, {
+                method: "GET",
+                headers: {
+                    "ngrok-skip-browser-warning": "true"
+                }
+            });
+            const data = await response.json();
+            
+            // 1. 動態更換黑膠唱盤的背景封面網址
+            disc.style.backgroundImage = `url('${API_BASE_URL}${data.cover_image_url}')`;
+            
+            // 2. 清空下拉選單並動態渲染 41 首歌曲
+            songSelect.innerHTML = "";
+            if (data.song_list && data.song_list.length > 0) {
+                data.song_list.forEach(song => {
+                    const option = document.createElement('option');
+                    option.value = song;
+                    option.innerText = song;
+                    songSelect.appendChild(option);
+                });
+                
+                // 預先載入第一首歌
+                loadSong(songSelect.value);
+            } else {
+                songSelect.innerHTML = '<option value="">發射基地內無音樂檔案</option>';
+            }
+        } catch (e) {
+            console.error("無法連線上音樂發射基地：", e);
+            songSelect.innerHTML = '<option value="">❌ 無法連線至音樂基地</option>';
+        }
+    };
+
+    if ('mediaSession' in navigator) {
+        navigator.mediaSession.setActionHandler('nexttrack', () => playRandomSong());
+        navigator.mediaSession.setActionHandler('previoustrack', () => playPreviousSong());
+    }
+
+</script>
+</body>
+</html>
