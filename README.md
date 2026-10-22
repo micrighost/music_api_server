@@ -80,3 +80,5 @@ uvicorn
    ```
 3. 開始使用：
 * **直接雙擊開啟**：不需任何伺服器環境，本機直接滑鼠雙擊 `index.html` 即可跨網域點歌放音樂。
+* **如果有把API部屬在其他地方**：複製API網址替換`index.html` 中的const API_BASE_URL = "http://localhost:8000";
+再直接滑鼠雙擊 `index.html` 即可跨網域點歌放音樂。
